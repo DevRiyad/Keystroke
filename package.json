@@ -1,0 +1,24 @@
+{
+  "name": "typing-test",
+  "private": true,
+  "version": "1.0.0",
+  "engines": {
+    "node": "22.x"
+  },
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w client",
+    "dev:server": "npm run dev -w server",
+    "build": "npm run build:check -w client && npm run build -w server",
+    "build:vercel": "npm run build -w client && npm run build -w server",
+    "typecheck": "npm run typecheck -w client && npm run typecheck -w server",
+    "lint": "npm run lint -w client && npm run lint -w server",
+    "test": "npm run test -w client && npm run test -w server",
+    "e2e": "npm run e2e -w client",
+    "start:server": "npm run start -w server",
+    "install:all": "npm install"
+  }
+}

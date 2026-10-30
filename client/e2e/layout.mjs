@@ -1,0 +1,43 @@
+import { tmpdir } from 'node:os'
+import { launch, check, summary } from './lib.mjs'
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+;(async () => {
+  for (const w of [320, 375, 768, 1280]) {
+    console.log(`\n# width ${w}`)
+    const { browser, page, errors } = await launch({ width: w, height: w < 500 ? 700 : 800 })
+    await page.goto((process.env.E2E_URL ?? 'http://localhost:5173/'))
+    await page.evaluate(() => localStorage.clear()); await page.reload()
+    await page.waitForSelector('input[aria-label="Typing input"]')
+    const overflow = () => page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }))
+    const ok = async (name) => { const o = await overflow(); check(`${name}: no horizontal overflow`, o.sw <= o.iw, `${o.sw} > ${o.iw}`) }
+    await ok('idle')
+    // toolbar buttons all reachable (inside viewport horizontally)
+    const off = await page.$$eval('[role="group"] button', (bs) => bs.filter((b) => { const r = b.getBoundingClientRect(); return r.right > window.innerWidth + 1 || r.left < -1 }).length)
+    check('toolbar buttons inside viewport', off === 0, String(off))
+    const tiny = await page.$$eval('button', (bs) => bs.filter((b) => { const r = b.getBoundingClientRect(); return r.width > 0 && (r.height < 24) }).map((b) => (b.getAttribute('aria-label') || b.textContent || '').trim()).slice(0, 6))
+    console.log('   buttons under 24px tall:', JSON.stringify(tiny))
+    await page.screenshot({ path: `${tmpdir()}/shot-${w}-idle.png` })
+    // words 10 -> results
+    await page.getByRole('group', { name: 'Test mode' }).getByRole('button', { name: 'words', exact: true }).click()
+    await page.getByRole('group', { name: 'Number of words' }).getByRole('button', { name: '10', exact: true }).click()
+    const text = await page.textContent('#typing-target')
+    await page.keyboard.type(text.slice(0, Math.floor(text.length / 2)))
+    await page.screenshot({ path: `${tmpdir()}/shot-${w}-typing.png` })
+    await page.keyboard.type(text.slice(Math.floor(text.length / 2)))
+    await page.waitForSelector('section[aria-label="Test results"]')
+    await ok('results')
+    await page.screenshot({ path: `${tmpdir()}/shot-${w}-results.png`, fullPage: true })
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.waitForSelector('[role="dialog"]')
+    await ok('settings dialog')
+    const dlg = await page.$eval('[role="dialog"]', (d) => { const r = d.getBoundingClientRect(); return { l: r.left, r: r.right, w: window.innerWidth } })
+    check('dialog fits the screen', dlg.l >= 0 && dlg.r <= dlg.w, JSON.stringify(dlg))
+    await page.screenshot({ path: `${tmpdir()}/shot-${w}-settings.png` })
+    await page.keyboard.press('Escape')
+    await page.getByRole('group', { name: 'Test mode' }).getByRole('button', { name: 'custom', exact: true }).click()
+    await ok('custom panel')
+    check('no console errors', errors.length === 0, errors.join('|'))
+    await browser.close()
+  }
+  process.exit(summary() ? 1 : 0)
+})()
